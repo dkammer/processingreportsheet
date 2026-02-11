@@ -4,6 +4,12 @@ import processing.pdf.*;
 PGraphicsPDF pdf = null;
 int appWidth = 595; // A4
 int appHeight = (int) (appWidth * sqrt(2));
+float printDPI = 300; 
+float screenDPI = 144;
+float scaleFactor = printDPI / screenDPI;
+int hiResWidth = (int)(appWidth * scaleFactor);
+int hiResHeight = (int)(appHeight * scaleFactor);
+
 PFont mediumFont; 
 PFont lightFont; 
 PFont lightCondensedFont;
@@ -21,12 +27,14 @@ void settings() {
   if(singlePage) {
     size(appWidth, appHeight);
   } else {
-    size(appWidth, appHeight, PDF, resultFile + ".pdf");
+    size(hiResWidth, hiResHeight, PDF, resultFile + ".pdf");
   }  
 }
 
 void setup() {  
   noLoop();
+  scale(scaleFactor);
+  
   sectionFont = createFont("data/RobotoCondensed-Regular.ttf", 9);
   largeFont = createFont("data/Roboto-Medium.ttf", 60);
   mediumFont = createFont("data/Roboto-Medium.ttf", 18);
@@ -95,8 +103,9 @@ void draw() {
     String key = entry.getKey();
     Map<Integer, Task> value = entry.getValue();
     if(singlePage) {
-      pdf = (PGraphicsPDF) createGraphics(appWidth, appHeight, PDF, "exports/" + key + "-"+ resultFile + ".pdf");
+      pdf = (PGraphicsPDF) createGraphics(hiResWidth, hiResHeight, PDF, "exports/" + key + "-"+ resultFile + ".pdf");
       pdf.beginDraw();
+      
     } else if (pdf == null) {
       pdf = (PGraphicsPDF) g;
       pdf.beginDraw();
@@ -231,22 +240,37 @@ void draw() {
       int lineWidth = 50;
       int originX = marginLeft + leftColumn + columnWidth * 2 + spacing + lineWidth;
       int originY = marginTop + lineWidth - 6;      
+      
       pdf.stroke(50,50,50);      
       int i = task.number - 1;
       float linePoints = map(task.points, 0, task.maxPoints, 0, lineWidth);
       float lineAverage = map(avg.getAveragePoints(), 0, task.maxPoints, 0, lineWidth);
+      
       pdf.strokeWeight(0.5);
+      
+      // 1. Calculate the angle manually
+      float angle = radians(360.0/numTasks * i) - radians(90);
+      
+      // 2. Draw the visual line using matrix (this part is fine for visual output)
       pdf.pushMatrix(); 
       pdf.translate(originX, originY);
-      pdf.rotate(radians(360/numTasks*i)-radians(90));
+      pdf.rotate(angle);
       pdf.line(0, 0, lineWidth, 0);
-      float x = pdf.screenX(linePoints, 0);
-      float y = pdf.screenY(linePoints, 0);
-      polygon.add(new PVector(x, y));
-      x = pdf.screenX(lineAverage, 0);
-      y = pdf.screenY(lineAverage, 0);
-      avgPolygon.add(new PVector(x, y));
       pdf.popMatrix();
+      
+      // 3. Calculate the Polygon vectors using pure Math (Sin/Cos)
+      // This decouples your data from the drawing state
+      float x, y;
+      
+      // For the task points
+      x = originX + cos(angle) * linePoints;
+      y = originY + sin(angle) * linePoints;
+      polygon.add(new PVector(x, y));
+      
+      // For the average points
+      x = originX + cos(angle) * lineAverage;
+      y = originY + sin(angle) * lineAverage;
+      avgPolygon.add(new PVector(x, y));
 
       // finish task printout
       tasksPrinted++;
@@ -261,7 +285,7 @@ void draw() {
     pdf.noStroke();
     pdf.strokeWeight(0.75);
     pdf.fill(darkGray, 50);
-    pdf.beginShape();    
+    pdf.beginShape();
     for (int i = 0; i < avgPolygon.size(); i++) {
       pdf.vertex(avgPolygon.get(i).x, avgPolygon.get(i).y);
     }
